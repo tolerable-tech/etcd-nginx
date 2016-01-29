@@ -1,0 +1,20 @@
+#!/bin/bash
+set -e
+{{if exists "/le/enabled"}}{{$maindomain := getv "/le/top"}}
+export CERT_KEY_PATH=/etc/acme/{{$maindomain}}/privkey.key
+export CERT_PATH=/etc/acme/{{$maindomain}}/cert.cer
+export CA_CERT_PATH=/etc/acme/{{$maindomain}}/ca_cert.cer
+{{if exists "/le/others"}}{{$otherdomains := getv "/le/others"}}
+/usr/local/bin/le.sh issue /srv/levalidate/{{$maindomain}} {{$maindomain}} {{$otherdomains}}
+
+curl http://$ETCD/v2/keys/le/certsexist -X PUT -d value="true"
+## This is necessary for the le-domain-check script.
+##{{$maindomain}} #{{$otherdomains}}
+{{else}}
+
+/usr/local/bin/le.sh issue /srv/levalidate/{{$maindomain}} {{$maindomain}}
+
+curl http://$ETCD/v2/keys/le/certsexist -X PUT -d value="true"
+
+## This is necessary for the le-domain-check script.
+##{{$maindomain}}{{else}}echo "le is not enabled"; exit 0 {{end}}

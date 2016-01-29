@@ -1,0 +1,20 @@
+#!/bin/bash
+
+TEMPLATE_FILE=$1
+MAIN_DOMAIN=$(tail -1 $TEMPLATE_FILE | cut -d "#" -f 3 | cut -d " " -f 1)
+
+if [[ ! "$MAIN_DOMAIN" =~ .*not\ enabled.* ]]; then
+  out=$(curl --silent $MAIN_DOMAIN/.validate-domain)
+
+  if [[ "$out" =~ .*fulcrum\ le\ validated\ domain.* ]]; then
+    exit 0
+  else
+    echo "Checked $MAIN_DOMAIN"
+    echo $out
+    exit 1
+  fi
+else
+  echo "le is not enabled"
+  exit 0
+fi
+

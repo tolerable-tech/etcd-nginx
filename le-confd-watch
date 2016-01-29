@@ -1,0 +1,15 @@
+#!/bin/bash
+
+echo "[sslwatch] waiting for SSL setup."
+
+until confd -onetime -node $ETCD -config-file /etc/confd/conf.d/le.toml; do
+  echo "[sslwatch] SSL configuration not valid.";
+  sleep 10;
+done
+
+echo "[sslwatch] SSL configuration valid - setting up watcher and requesting certs"
+
+confd -interval 30 -node $ETCD -config-file /etc/confd/conf.d/le.toml &
+
+tail -f /dev/null
+
