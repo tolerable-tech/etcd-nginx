@@ -7,10 +7,10 @@ EXPOSE 443
 
 RUN apt-get -qq update && apt-get install -qqy curl netcat vim-tiny
 
-RUN curl -L https://github.com/kelseyhightower/confd/releases/download/v0.10.0/confd-0.10.0-linux-amd64 -o confd \
+RUN curl -L https://github.com/kelseyhightower/confd/releases/download/v0.11.0/confd-0.11.0-linux-amd64 -o confd \
   && mv confd /usr/local/bin/confd && chmod +x /usr/local/bin/confd
 
-RUN curl -L https://raw.githubusercontent.com/Neilpang/le/master/le.sh -o ./le.sh && mv ./le.sh /usr/local/bin/le.sh && chmod +x /usr/local/bin/le.sh
+RUN curl -L https://raw.githubusercontent.com/Neilpang/acme.sh/master/acme.sh -o ./le.sh && mv ./le.sh /usr/local/bin/le.sh && chmod +x /usr/local/bin/le.sh
 
 RUN apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* 
 
@@ -23,12 +23,14 @@ VOLUME /etc/acme
 #RUN sed -i '/access_log/a\
     #log_format upstreamlog "[$time_local] $remote_addr passed to: $upstream_addr: $request Upstream Response Time: $upstream_response_time Request time: $request_time";' /etc/nginx/nginx.conf
 ADD nginx /etc/nginx
+RUN /bin/rm /etc/nginx/conf.d/default.conf
 VOLUME /etc/nginx
 
 # add confd-watch script
+ADD /nginx-conf-test.sh /usr/local/bin/nginx-conf-test
 ADD /confd-watch /usr/local/bin/confd-watch
 ADD /le-confd-watch /usr/local/bin/le-confd-watch
-ADD /le-domain-check /usr/local/bin/le-domain-check
+ADD /le-fetch /usr/local/bin/le-fetch
 
 CMD ["/usr/local/bin/confd-watch"]
 

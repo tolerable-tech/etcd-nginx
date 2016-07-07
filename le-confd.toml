@@ -5,11 +5,12 @@
 src = "le.tmpl"
 
 # The location to place the rendered configuration file
-dest = "/usr/local/bin/lefetch"
+dest = "/usr/local/bin/le-fetch.conf"
 
 # The etcd keys or directory to watch.  This is where the information to fill in
 # the template will come from.
-keys = [ "/le/top", "/le/others", "/le/enabled", "/le/expiring" ]
+keys = ["/le/top", "/le/others", "/le/enabled", "/le/expiring", "/le/stage"]
+
 
 # File ownership and mode information
 owner = "root"
@@ -17,5 +18,5 @@ mode = "0744"
 
 # These are the commands that will be used to check whether the rendered config is
 # valid and to reload the actual service once the new config is in place
-check_cmd = "/usr/local/bin/le-domain-check {{.src}}"
-reload_cmd = "/usr/local/bin/lefetch"
+#check_cmd = "/usr/local/bin/le-domain-check {{.src}}"
+reload_cmd = "/usr/local/bin/le-fetch"

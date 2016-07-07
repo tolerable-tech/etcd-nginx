@@ -1,20 +1,16 @@
-#!/bin/bash
-set -e
-{{if exists "/le/enabled"}}{{$maindomain := getv "/le/top"}}
+{{$enabled := getv "/le/enabled"}}{{if eq $enabled "true"}}{{$maindomain := getv "/le/top"}}{{$expiring := getv "/le/expiring"}}{{$otherdomains := getv "/le/others"}}{{$usestage := getv "/le/stage"}}
+
+export ENABLED=true
+export ISSUED_EXPIRY_FILE="/etc/acme/issued_expiry"
+export ISSUED_ODOMAINS_FILE="/etc/acme/issued_domains"
+export EXP_DAYS="6912000" # 80 days
+export LE_WORKING_DIR=/etc/acme
 export CERT_KEY_PATH=/etc/acme/{{$maindomain}}/privkey.key
 export CERT_PATH=/etc/acme/{{$maindomain}}/cert.cer
 export CA_CERT_PATH=/etc/acme/{{$maindomain}}/ca_cert.cer
-{{if exists "/le/others"}}{{$otherdomains := getv "/le/others"}}
-/usr/local/bin/le.sh issue /srv/levalidate/{{$maindomain}} {{$maindomain}} {{$otherdomains}}
+export MAIN_DOMAIN={{$maindomain}}
+export OTHER_DOMAINS={{$otherdomains}}
+export EXPIRING={{$expiring}}
+{{if eq $usestage "true"}}export STAGE="use staging letsencrypt servers"{{end}}
 
-curl http://$ETCD/v2/keys/le/certsexist -X PUT -d value="true"
-## This is necessary for the le-domain-check script.
-##{{$maindomain}} #{{$otherdomains}}
-{{else}}
-
-/usr/local/bin/le.sh issue /srv/levalidate/{{$maindomain}} {{$maindomain}}
-
-curl http://$ETCD/v2/keys/le/certsexist -X PUT -d value="true"
-
-## This is necessary for the le-domain-check script.
-##{{$maindomain}}{{else}}echo "le is not enabled"; exit 0 {{end}}
+{{else}}export ENABLED=false{{end}}

@@ -1,5 +1,5 @@
-{{range $dir := lsdir "/apps"}}{{$custdir := printf "/apps/%s/*" $dir}}{{$vhostdir := printf "/apps/%s/vhost" $dir}}{{$sslkey := printf "/apps/%s/ssl" $dir}}{{$vhostglob := printf "%s/*" $vhostdir}}{{$endpointkey := printf "/apps/%s/endpoint" $dir}}
-{{$names := getvs $vhostglob}}{{$listname := join $names " " }}{{$saf := base $dir }}{{$maindomain := getv "/le/top"}}{{$certsexist := getv "/le/certsexist"}}
+{{$maindomain := getv "/le/top"}}{{range $dir := lsdir "/apps"}}{{$custdir := printf "/apps/%s/*" $dir}}{{$vhostdir := printf "/apps/%s/vhost" $dir}}{{$sslkey := printf "/apps/%s/ssl" $dir}}{{$vhostglob := printf "%s/*" $vhostdir}}{{$endpointkey := printf "/apps/%s/endpoint" $dir}}
+{{$names := getvs $vhostglob}}{{$listname := join $names " " }}{{$saf := base $dir }}{{$certsexist := getv "/le/certsexist"}}
 # $dir {{$dir}}
 # $custdir {{$custdir}}
 # $vhostdir {{$vhostdir}}
@@ -12,7 +12,7 @@ upstream {{base $dir}} { {{range gets $custdir}}{{ $key := .Key }}{{ if ne $key 
 server {
   listen 80;
   server_name {{ $listname }};
-  
+
   location = /.validate-domain {
     return 200 "fulcrum le validated domain";
   }
@@ -25,25 +25,25 @@ server {
   }
 } {{end}}{{end}}
 
-server { {{if exists $sslkey}}{{$ssl := getv $sslkey}}{{if eq $ssl "redirect"}}
+server { {{if exists $sslkey}}{{$ssl := getv $sslkey}}{{if eq $ssl "redirect"}}{{if eq $certsexist "true"}}
     listen 443 ssl;
-    include ssl.conf;
-
-    {{if eq $certsexist "true"}}ssl_certificate_key     /etc/acme/{{$maindomain}}/privkey.key;
+    include /etc/nginx/ssl.conf;
+    ssl_certificate_key     /etc/acme/{{$maindomain}}/privkey.key;
     ssl_certificate         /etc/acme/{{$maindomain}}/cert.cer;
     ssl_trusted_certificate /etc/acme/{{$maindomain}}/ca_cert.cer;{{end}}
     {{else}}
     listen 80;
 {{end}}{{end}}
-   server_name {{ $listname }};
+    server_name {{ $listname }};
 
     location / {
         proxy_set_header   X-Real-IP        $remote_addr;
         proxy_set_header   X-Forwarded-For  $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto $scheme;
         proxy_set_header   Host             $host;
         proxy_pass http://{{base $dir}};
     }
-    {{if eq $dir "silo"}} {{range $epdir := lsdir "/apps"}}{{$epkey := printf "/apps/%s/endpoint" $epdir}} {{if exists $epkey}} {{$endpoint := getv $epkey}}
+    {{if eq $dir "fulcrum"}} {{range $epdir := lsdir "/apps"}}{{$epkey := printf "/apps/%s/endpoint" $epdir}} {{if exists $epkey}} {{$endpoint := getv $epkey}}
     location ^~ /{{$endpoint}}/ {
         proxy_set_header   X-Real-IP        $remote_addr;
         proxy_set_header   X-Forwarded-For  $proxy_add_x_forwarded_for;
@@ -51,5 +51,20 @@ server { {{if exists $sslkey}}{{$ssl := getv $sslkey}}{{if eq $ssl "redirect"}}
         proxy_pass http://{{base $epdir}};
     }
     {{end}}{{end}}{{end}}
-}
-{{end}}{{end}}
+}{{end}}{{else}}{{$letopblank := eq $maindomain ""}}{{if not $letopblank}}
+server {
+  listen 80;
+  server_name {{$maindomain}};
+
+  location = /.validate-domain {
+    return 200 "fulcrum le validated domain";
+  }
+  location /.well-known/acme-challenge/ {
+    alias /srv/levalidate/{{$maindomain}}/.well-known/acme-challenge/;
+  }
+  location / {
+    proxy_set_header X-Forwarded-Proto https;
+    rewrite ^ https://$server_name$request_uri? break;
+  }
+} {{end}}
+{{end}}

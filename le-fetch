@@ -1,0 +1,96 @@
+#!/bin/bash
+
+source /usr/local/bin/le-fetch.conf
+
+LOCKFILE=$LE_WORKING_DIR/running
+
+if [[ "$ENABLED" == "false" ]]; then
+  echo "[le-fetch] le is not enabled."
+  exit 0
+fi
+
+function lock() {
+  if [[ -f "$LOCKFILE" ]]; then
+    echo "[le-fetch] $LOCKFILE is present, assuming le-fetch is running"
+    exit 1
+  fi
+  touch $LOCKFILE
+  echo "$$" > $LOCKFILE
+}
+
+function verifylock() {
+  local catlock=`cat $LOCKFILE`
+  if [[ ! "$catlock" == "$$" ]]; then
+    echo "[le-fetch] another process also locked? bouncing."
+    exit 1
+  fi
+}
+
+function unlock() {
+  rm -f $LOCKFILE
+}
+
+lock
+
+## Throttling of sorts. We want to avoid requesting certs unless we actually
+## need them. We keep issuance info stored with the files, so if we have the
+## files we have the logic around them, which is why we're using files and not
+## trusting etcd.
+## If we have all of our certs
+if [[ -f $CERT_KEY_PATH && -f $CERT_PATH && -f $CA_CERT_PATH ]]; then
+  ## and we're requesting the same other domains
+  issued_domains=$(cat $ISSUED_ODOMAINS_FILE)
+  if [[ "$MAIN_DOMAIN,$OTHER_DOMAINS" == "$issued_domains" ]]; then
+    ## and the etcd expiring time is the time we wrote there or "boot" (what boot script sets it to)
+    issued_expiry=$(cat $ISSUED_EXPIRY_FILE)
+    if [[ "$EXPIRING" == "$issued_expiry" || "$EXPIRING" == "boot" ]]; then
+      ## then we can bounce. everything is already setup right.
+      echo "[le-fetch] SSL is configured for the current requested domains and is unexpired."
+      exit 0
+    fi
+  fi
+fi
+
+function set_expiry_in_etcd() {
+  ## Setup our expiry watch logic in ca
+  issued_at=`date +%s`;
+  expiry=$(($issued_at + $EXP_DAYS));
+  echo $expiry > /etc/acme/issued_expiry
+  curl http://$ETCD/v2/keys/le/expiring -X PUT -d value="$expiry"
+}
+
+function set_issued_domains() {
+  ## setup our issued domains logic:
+  echo "$MAIN_DOMAIN,$OTHER_DOMAINS" > /etc/acme/issued_domains
+}
+
+function set_certs_exists_in_etcd() {
+  ## triggers regen of nginx confs to and sets up the certs there.
+  curl http://$ETCD/v2/keys/le/certsexist -X PUT -d value="true"
+}
+
+COUNTER=1
+until [[ $COUNTER -gt 3 ]]; do
+  verifylock
+  /usr/local/bin/le.sh issue /srv/levalidate/$MAIN_DOMAIN $MAIN_DOMAIN $OTHER_DOMAINS
+  exitstatus=$?
+  if [[ "$exitstatus" == "0" ]]; then
+    set_expire_in_etcd
+    set_issued_domains
+    set_certs_exists_in_etcd
+    unlock
+    exit 0
+  else
+    echo "[le-fetch] failed, waiting a bit and trying again"
+    export FORCE=true
+    let COUNTER+=1
+    sleep 2
+    echo "[le-fetch] retrying!"
+  fi
+done
+
+echo "[le-fetch] retried max number of times without success, sorry bro!"
+
+unlock
+
+exit 1
