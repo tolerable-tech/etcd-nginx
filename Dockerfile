@@ -27,9 +27,9 @@ RUN /bin/rm /etc/nginx/conf.d/default.conf
 VOLUME /etc/nginx
 
 # add confd-watch script
-ADD /nginx-conf-test.sh /usr/local/bin/nginx-conf-test
+#ADD /nginx-conf-test.sh /usr/local/bin/nginx-conf-test
 ADD /confd-watch /usr/local/bin/confd-watch
-ADD /le-confd-watch /usr/local/bin/le-confd-watch
+#ADD /le-confd-watch /usr/local/bin/le-confd-watch
 ADD /le-fetch /usr/local/bin/le-fetch
 
 CMD ["/usr/local/bin/confd-watch"]
