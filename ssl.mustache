@@ -1,0 +1,12 @@
+
+export ISSUED_EXPIRY_FILE="/etc/acme/issued_expiry"
+export ISSUED_ODOMAINS_FILE="/etc/acme/issued_domains"
+export EXP_DAYS="6912000" # 80 days
+export LE_WORKING_DIR=/etc/acme
+export CERT_KEY_PATH=/etc/acme/{{maindomain}}/privkey.key
+export CERT_PATH=/etc/acme/{{maindomain}}/cert.cer
+export CA_CERT_PATH=/etc/acme/{{maindomain}}/ca_cert.cer
+export MAIN_DOMAIN={{maindomain}}
+export OTHER_DOMAINS={{others}}
+{{#le_stage}}export STAGE="use staging letsencrypt servers"{{/le_stage}}
+

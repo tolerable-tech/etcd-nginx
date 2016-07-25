@@ -24,6 +24,7 @@ VOLUME /etc/acme
     #log_format upstreamlog "[$time_local] $remote_addr passed to: $upstream_addr: $request Upstream Response Time: $upstream_response_time Request time: $request_time";' /etc/nginx/nginx.conf
 ADD nginx /etc/nginx
 RUN /bin/rm /etc/nginx/conf.d/default.conf
+ADD le-auth.conf /etc/nginx/conf.d/le-auth.off
 VOLUME /etc/nginx
 
 # add confd-watch script
