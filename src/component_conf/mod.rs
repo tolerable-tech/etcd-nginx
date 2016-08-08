@@ -5,18 +5,17 @@ extern crate etcd;
 //use crypto::digest::Digest;
 
 use regex::Regex;
-//use chrono::*;
-
-use std::fs::File;
-use std::io::Write;
-use std::error::Error;
 
 use etcd::Client;
 //
 use conf_manager::*;
 use helpers;
+use nginx;
 
-fn get_component_spec(key_node: &etcd::Node, client: &Client) -> ComponentSpec {
+const SSL_APPS_CONF: &'static str = "/etc/nginx/conf.d/ssl_apps.conf";
+const APPS_CONF: &'static str = "/etc/nginx/conf.d/non_ssl_apps.conf";
+
+fn get_component_spec(key_node: &etcd::Node, client: &Client, server_state: &ServerState) -> ComponentSpec {
     lazy_static! {
         static ref VHOST_RE: Regex = Regex::new("/vhost").unwrap();
         static ref SSLRE: Regex = Regex::new("/ssl").unwrap();
@@ -26,7 +25,6 @@ fn get_component_spec(key_node: &etcd::Node, client: &Client) -> ComponentSpec {
     let component_key = key_node.key.clone().unwrap();
     let v: Vec<&str> = component_key.split('/').collect();
     let name = v[2];
-    //println!("name:: {}", name);
 
     let mut cspec = ComponentSpec::new(name.to_string());
 
@@ -41,7 +39,8 @@ fn get_component_spec(key_node: &etcd::Node, client: &Client) -> ComponentSpec {
             vhosts if VHOST_RE.is_match(&owned_thing.key.clone().unwrap()) => {
                 //println!("fart! {:?}", vhosts);
                 match vhosts.nodes.to_owned() {
-                    Some(hosts) => {
+                    Some(mut hosts) => {
+                        hosts.sort_by(|a,b| a.key.clone().unwrap().cmp(&b.key.clone().unwrap()));
                         for vhost in hosts.iter() {
                             //println!("adding vhost!!! {:?}", vhost);
                             cspec.vhosts.push(vhost.value.to_owned().unwrap());
@@ -53,7 +52,7 @@ fn get_component_spec(key_node: &etcd::Node, client: &Client) -> ComponentSpec {
             },
             _ssl if SSLRE.is_match(&owned_thing.key.clone().unwrap()) => cspec.ssl_redirect = true,
             endpoint if ENDPOINT_RE.is_match(&owned_thing.key.unwrap()) => {
-                println!("{:?}", endpoint);
+                server_state.debug(&format!("setting endpoint for c:{} - {:?}", name, endpoint));
                 match endpoint.value {
                     Some(ref ep) => cspec.endpoint = ep.clone(),
                     None => (),
@@ -64,41 +63,65 @@ fn get_component_spec(key_node: &etcd::Node, client: &Client) -> ComponentSpec {
         }
     }
 
-    cspec.finalize();
+    cspec.finalize(server_state);
+    //server_state.debug(&format!("generating component spec for: {}. Configured: {}", name, cspec.configured));
     cspec
 }
 
-pub fn gen(client: &Client, server_state: &ServerState) -> String {
+pub fn gen(client: &Client, server_state: &mut ServerState) {
     let components = match client.get("/apps", false, false, false) {
-        Ok(ksp) => ksp.node.unwrap().nodes.unwrap(),
+        Ok(ksp) => {
+            match ksp.node.unwrap().nodes {
+                Some(n) => n,
+                None => vec![],
+        }},
         Err(_) => vec![]
     };
 
-    let mut comp_vecs: Vec<ComponentSpec> = Vec::new();
+    let mut ssl_components: Vec<ComponentSpec> = Vec::new();
+    let mut non_ssl_components: Vec<ComponentSpec> = Vec::new();
     let mut endpoints: Vec<String> = Vec::new();
     for component in components.iter() {
-        //println!("yay! {:?}", component);
-        let struct_data = get_component_spec(component, client);
+        let struct_data = get_component_spec(component, client, server_state);
         endpoints.push(struct_data.endpoint.clone());
-        comp_vecs.push(struct_data);
+
+        if struct_data.ssl_redirect {
+            ssl_components.push(struct_data);
+        } else {
+            non_ssl_components.push(struct_data);
+        }
     }
 
-    let data = MustacheHolder::new(comp_vecs, endpoints, server_state.ssl_ready()); // { endpoints: endpoints, components: comp_vecs};
-    let template_out_string = helpers::template_to_string::<String, MustacheHolder>("apps.mustache", data);
+    let ssl_data = MustacheHolder::new(ssl_components, endpoints, server_state.ssl_ready());
+    let ssl_template_string = helpers::template_to_string::<String, MustacheHolder>("ssl_apps", ssl_data);
 
-    let new_sha_str = helpers::sha_str(&template_out_string);
+    server_state.loud("  -  ssl_app.conf!");
+    server_state.loud(&ssl_template_string);
 
-    //println!("{} == {} #=> {}", server_state.existing_apps_conf_sha, new_sha_str, new_sha_str.eq(&server_state.existing_apps_conf_sha));
+    let non_ssl_data = MustacheHolder::new(non_ssl_components, vec![], false);
+    let non_ssl_template_string = helpers::template_to_string::<String, MustacheHolder>("non_ssl_apps", non_ssl_data);
 
-    if !new_sha_str.eq(&server_state.existing_apps_conf_sha) {
-        println!("writing new components conf file....");
-        let mut outfile = match File::create("testout.conf"){
-            Err(why) => panic!("Couldn't open template file, {}", why.description()),
-            Ok(file) => file,
-        };
-        outfile.write_all(template_out_string.as_bytes()).unwrap();
+    server_state.loud("  -  app.conf!");
+    server_state.loud(&non_ssl_template_string);
+
+    let ssl_sha = helpers::sha_str(&ssl_template_string);
+    let nssl_sha = helpers::sha_str(&non_ssl_template_string);
+    let new_sha = format!("{}:{}", ssl_sha, nssl_sha);
+
+
+    if !new_sha.eq(&server_state.existing_apps_conf_sha) {
+        server_state.debug(&format!("writing new components conf file....{} == {}",
+                                      new_sha, server_state.existing_apps_conf_sha));
+        helpers::update_file(SSL_APPS_CONF, ssl_template_string);
+        helpers::update_file(APPS_CONF, non_ssl_template_string);
+        if nginx::test_confs() {
+            server_state.existing_apps_conf_sha = new_sha;
+            server_state.nginx_outdated = true;
+        } else {
+            server_state.debug("  -- new conf failed to test, rolling back.");
+            helpers::rollback_conf(SSL_APPS_CONF);
+            helpers::rollback_conf(APPS_CONF);
+        }
     }
-
-    new_sha_str
 }
 

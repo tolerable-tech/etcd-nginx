@@ -1,0 +1,11 @@
+{{#folders}}{{#configured}}
+
+server {
+  listen 80;
+  server_name {{name_list}};
+
+  root /srv/static/{{path}};
+
+}
+
+{{/configured}}{{/folders}}

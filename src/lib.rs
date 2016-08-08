@@ -26,10 +26,11 @@ use chrono::*;
 
 use etcd::Client;
 
-use std::error::Error;
+//use std::error::Error;
 //use std::io::prelude::*;
 //use std::fs::File;
 use std::path::Path;
+use std::env;
 
 #[derive(RustcEncodable, Debug)]
 pub enum SSLCertState {
@@ -54,6 +55,7 @@ impl SSLState {
         let gen_at: String;
         let state:  SSLCertState;
         let mut le_staging = true;
+        let defaulted_cert_string: String;
         let domains = SSLState::fetch_requested_certs(client);
 
         if enabled {
@@ -61,9 +63,8 @@ impl SSLState {
                 if domains.len() == 0 {
                     panic!("No domains set for ssl cert, please set 'ssl/domains' to enable SSL.");
                 } else {
-                    //println!("domains => {}", domains[0]);
-                    Path::new("/asdf")
-                    //Path::new(format!("/etc/acme/{}/cert.cer", &domains[0]))
+                    defaulted_cert_string = format!("/etc/acme/{}/cert.cer", domains[0]);
+                    Path::new(&defaulted_cert_string)
                 }
             } else { Path::new(&cert_string) };
 
@@ -107,6 +108,22 @@ impl SSLState {
         if self.expired() { self.certs_state = SSLCertState::Expired };
     }
 
+    pub fn certs_generated(&mut self, client: &Client) {
+        let utc: DateTime<UTC> = UTC::now(); 
+        let gatstamp = utc.format("%s").to_string();
+        client.set("/ssl/generatedat", &gatstamp, None).unwrap();
+        self.generated_at = gatstamp;
+        self.certs_state = SSLCertState::Available;
+    }
+
+    pub fn fetching_certs(&mut self) {
+        self.certs_state = SSLCertState::Fetching;
+    }
+
+    pub fn fetch_failed(&mut self) {
+        self.certs_state = SSLCertState::Failed;
+    }
+
     fn fetch_requested_certs(client: &Client) -> Vec<String> {
         let domains = match client.get("/ssl/domains", false, false, false) {
             Ok(keyspace) => {
@@ -138,15 +155,25 @@ pub struct ServerState {
     pub ssl_state: SSLState,
     pub existing_apps_conf_sha: String,
 
+    pub nginx_outdated: bool,
+
     pub components: Vec<ComponentSpec>,
-    pub endpoints: Vec<String>
+    pub endpoints: Vec<String>,
+
+    pub debug: bool,
+    pub loud: bool,
 }
 impl ServerState {
     pub fn new(cert_string: String, client: &Client) -> ServerState {
+        let debug = match env::var("DEBUG") {
+            Ok(_) => true,
+            Err(_) => false,
+        };
+
         ServerState {
-            ssl_state: SSLState::new(cert_string, client),
-            existing_apps_conf_sha: String::from(""),
-            components: vec![], endpoints: vec![],
+            ssl_state: SSLState::new(cert_string, client), debug: debug,
+            existing_apps_conf_sha: String::from(""), loud: false,
+            components: vec![], endpoints: vec![], nginx_outdated: false,
         }
     }
 
@@ -157,6 +184,21 @@ impl ServerState {
         }
     }
 
+    pub fn debug(&self, str: &str) {
+        if self.debug {
+            println!("{}", str);
+        }
+    }
+
+    pub fn loud(&self, str: &str) {
+        if self.loud {
+            println!("{}", str);
+        }
+    }
+
+    pub fn info(&self, str: &str) {
+        println!("{}", str);
+    }
 }
 
 #[derive(RustcEncodable, Debug)]
@@ -168,6 +210,8 @@ pub struct ComponentSpec {
     pub ssl_redirect: bool,
     pub is_fulcrum: bool,
     pub configured: bool,
+    pub name_list: String,
+    pub show_placeholder: bool,
 }
 impl ComponentSpec {
     pub fn new(name: String) -> ComponentSpec {
@@ -179,12 +223,51 @@ impl ComponentSpec {
             ssl_redirect: false,
             is_fulcrum: false,
             configured: false,
+            name_list: String::new(),
+            show_placeholder: false,
         }
     }
 
-    pub fn finalize(&mut self) {
+    pub fn finalize(&mut self, server_state: &ServerState) {
         if self.vhosts.len() != 0 && self.upstreams.len() != 0 {
             self.configured = true;
+            self.name_list = self.vhosts.join(", ");
+        }
+        if self.ssl_redirect && !server_state.ssl_ready() {
+            self.show_placeholder = true;
+        }
+    }
+}
+
+#[derive(RustcEncodable, Debug)]
+pub struct StaticSpec {
+    pub name: String,
+    pub vhosts: Vec<String>,
+    pub path: String,
+    pub is_fulcrum: bool,
+    pub configured: bool,
+    pub name_list: String,
+    pub force_ssl: bool,
+    pub ssl_enabled: bool,
+}
+impl StaticSpec {
+    pub fn new(name: String) -> StaticSpec {
+        StaticSpec {
+            name: name,
+            vhosts: vec![],
+            path: String::new(),
+            is_fulcrum: false,
+            configured: false,
+            name_list: String::new(),
+            force_ssl: true,
+            ssl_enabled: false,
+        }
+    }
+
+    pub fn finalize(&mut self, _server_state: &ServerState) {
+        if self.vhosts.len() != 0 {
+            self.configured = true;
+            self.name_list = self.vhosts.join(", ");
         }
     }
 }
@@ -205,14 +288,26 @@ impl MustacheHolder {
 
 #[derive(RustcEncodable, Debug)]
 pub struct SSLMustacheHolder {
-    pub maindomain: String,
-    pub others: String,
+    pub domains: String,
     pub le_stage: bool
 }
 impl SSLMustacheHolder {
-    pub fn new(maindomain: &str, others: String, le_stage: bool) -> SSLMustacheHolder {
+    pub fn new(domain: &str, le_stage: bool) -> SSLMustacheHolder {
         SSLMustacheHolder {
-            maindomain: String::from(maindomain), others: String::from(others), le_stage: le_stage,
+            domains: String::from(domain), le_stage: le_stage,
+        }
+    }
+}
+
+#[derive(RustcEncodable, Debug)]
+pub struct StaticMustacheHolder {
+    pub folders: Vec<StaticSpec>,
+    pub ssl_ready: bool
+}
+impl StaticMustacheHolder {
+    pub fn new(folders: Vec<StaticSpec>, ssl: bool) -> StaticMustacheHolder {
+        StaticMustacheHolder {
+            folders: folders, ssl_ready: ssl,
         }
     }
 }

@@ -6,7 +6,8 @@ export LE_WORKING_DIR=/etc/acme
 export CERT_KEY_PATH=/etc/acme/{{maindomain}}/privkey.key
 export CERT_PATH=/etc/acme/{{maindomain}}/cert.cer
 export CA_CERT_PATH=/etc/acme/{{maindomain}}/ca_cert.cer
-export MAIN_DOMAIN={{maindomain}}
-export OTHER_DOMAINS={{others}}
+export DOMAINS="{{domains}}"
 {{#le_stage}}export STAGE="use staging letsencrypt servers"{{/le_stage}}
+
+#fartsfartsfarts
 

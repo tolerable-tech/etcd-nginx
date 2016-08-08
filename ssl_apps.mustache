@@ -5,7 +5,7 @@ upstream {{ name }} {
 {{/upstreams}}
 }
 
-{{#ssl_redirect}}{{#vhosts}}server {
+{{#vhosts}}server {
   listen 80;
   server_name {{ . }};
 
@@ -14,17 +14,15 @@ upstream {{ name }} {
     rewrite ^ https://$server_name$request_uri? break;
   }
 }
-{{/vhosts}}{{/ssl_redirect}}
-{{#ssl_redirect}}server {
+{{/vhosts}}
+
+server {
   listen 443 ssl;
   include /etc/nginx/ssl.conf;
-  ssl_certificate_key     /etc/acme/{{$maindomain}}/privkey.key;
-  ssl_certificate         /etc/acme/{{$maindomain}}/cert.cer;
-  ssl_trusted_certificate /etc/acme/{{$maindomain}}/ca_cert.cer;{{end}}
-{{/ssl_redirect}}
-{{^ssl_redirect}}server {
-  listen 80;
-{{/ssl_redirect}}
+  ssl_certificate_key     /etc/acme/privkey.key;
+  ssl_certificate         /etc/acme/cert.cer;
+  ssl_trusted_certificate /etc/acme/ca_cert.cer;
+
   server_name {{name_list}};
 
   location / {
@@ -35,4 +33,5 @@ upstream {{ name }} {
     proxy_pass http://{{name}};
   }
 }
+
 {{/configured}}{{/components}}

@@ -1,20 +1,10 @@
 #!/bin/bash
 
+set -e
+
 source /usr/local/bin/le-fetch.conf
 
-LETS_ENCRYPT_VALIDATION_CONF=/etc/nginc/conf.d/le-auth
-
-if [[ -f $LETS_ENCRYPT_VALIDATION_CONF.off ]]; then
-  cp $LETS_ENCRYPT_VALIDATION_CONF.off $LETS_ENCRYPT_VALIDATION_CONF.conf
-fi
-
-nginx -s reload
-
-
-/usr/local/bin/le.sh issue /srv/levalidate/$MAIN_DOMAIN $MAIN_DOMAIN $OTHER_DOMAINS
-
-rm $LETS_ENCRYPT_VALIDATION_CONF.conf
-nginx -s reload
+/usr/local/bin/le.sh --issue $DOMAINS  -w /srv/levalidate/fulcrum
 
 exitstatus=$?
 if [[ "$exitstatus" == "0" ]]; then
