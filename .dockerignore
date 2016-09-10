@@ -1,1 +1,11 @@
+
 nginx.tar.gz
+etcd-v2.3.7-darwin-amd64/*
+etcd-v2.3.7-darwin-amd64.zip
+etcd-v2.3.7-linux-amd64/*
+etcd-v2.3.7-linux-amd64.tar.gz
+default.etcd/*
+target/debug/
+target/release/
+target/x86_64-unknown-linux-musl/release/deps/
+

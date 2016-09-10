@@ -1,0 +1,26 @@
+{{#components}}{{#configured}}
+
+{{#force_ssl}}{{#vhosts}}server {
+  listen 80;
+  server_name {{ . }};
+
+  location / {
+    proxy_set_header X-Forwarded-Proto https;
+    rewrite ^ https://$server_name$request_uri? break;
+  }
+}
+{{/vhosts}}{{/force_ssl}}
+
+server {
+  listen 443 ssl;
+  include /etc/nginx/ssl.conf;
+  ssl_certificate_key     /etc/acme/privkey.key;
+  ssl_certificate         /etc/acme/cert.cer;
+  ssl_trusted_certificate /etc/acme/ca_cert.cer;
+
+  server_name {{name_list}};
+
+  root /srv/static/{{path}};
+}
+
+{{/configured}}{{/components}}

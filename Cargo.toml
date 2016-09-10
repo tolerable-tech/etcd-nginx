@@ -1,0 +1,17 @@
+[package]
+name = "conf_manager"
+version = "0.1.2"
+authors = ["Jake Wilkins <jake@jakewilkins.com>"]
+
+[dependencies]
+serde = "=0.7.7"
+serde_json = "=0.7.1"
+mustache = "0.7.0"
+etcd = "0.5.4"
+rust-crypto = "0.2.36"
+rustc-serialize = "0.3.19"
+lazy_static = "0.2.1"
+regex = "0.1.73"
+getopts = "0.2"
+chrono = "0.2"
+

@@ -7,37 +7,33 @@ EXPOSE 443
 
 RUN apt-get -qq update && apt-get install -qqy curl netcat vim-tiny
 
-RUN curl -L https://github.com/kelseyhightower/confd/releases/download/v0.11.0/confd-0.11.0-linux-amd64 -o confd \
-  && mv confd /usr/local/bin/confd && chmod +x /usr/local/bin/confd
-
 RUN curl -L https://raw.githubusercontent.com/Neilpang/acme.sh/master/acme.sh -o ./le.sh && mv ./le.sh /usr/local/bin/le.sh && chmod +x /usr/local/bin/le.sh
 
 RUN apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* 
 
-ADD nginx-confd.toml /etc/confd/conf.d/nginx.toml
-ADD le-confd.toml /etc/confd/conf.d/le.toml
-
 VOLUME /etc/acme
-# Nginx tuning
-#RUN rm /etc/nginx/conf.d/default.conf
-#RUN sed -i '/access_log/a\
-    #log_format upstreamlog "[$time_local] $remote_addr passed to: $upstream_addr: $request Upstream Response Time: $upstream_response_time Request time: $request_time";' /etc/nginx/nginx.conf
+
 ADD nginx /etc/nginx
 RUN /bin/rm /etc/nginx/conf.d/default.conf
+ADD le-auth.conf /etc/nginx/conf.d/le-auth.off
+ADD domain-validation.conf /etc/nginx/conf.d/domain-validation.conf
 VOLUME /etc/nginx
 
-# add confd-watch script
-#ADD /nginx-conf-test.sh /usr/local/bin/nginx-conf-test
-ADD /confd-watch /usr/local/bin/confd-watch
-#ADD /le-confd-watch /usr/local/bin/le-confd-watch
 ADD /le-fetch /usr/local/bin/le-fetch
+ADD target/x86_64-unknown-linux-musl/release/conf_manager /usr/local/bin/conf_manager
 
-CMD ["/usr/local/bin/confd-watch"]
+CMD ["/usr/local/bin/conf_manager"]
 
-RUN mkdir -p /srv/levalidate
+RUN mkdir -p /srv/levalidate /srv/fulcrum /srv/sticky
+ADD ssl_placeholder.html /srv/fulcrum/ssl_placeholder.html
 
 # moved this down because it changes most often.
-ADD nginx-conf-templ /etc/confd/templates/nginx.tmpl
-ADD le.tmpl /etc/confd/templates/le.tmpl
+ADD ssl.mustache /usr/local/lib/conf_templates/ssl.mustache
+ADD ssl_apps.mustache /usr/local/lib/conf_templates/ssl_apps.mustache
+ADD non_ssl_apps.mustache /usr/local/lib/conf_templates/non_ssl_apps.mustache
+ADD ssl_static_folders.mustache /usr/local/lib/conf_templates/ssl_static_folders.mustache
+ADD static_folders.mustache /usr/local/lib/conf_templates/static_folders.mustache
+#ADD le.tmpl /etc/confd/templates/le.tmpl
 # This has to come after ADD for the Add to persist?
-VOLUME /etc/confd
+VOLUME /usr/local/lib/conf_templates
+
