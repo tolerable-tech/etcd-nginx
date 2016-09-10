@@ -6,31 +6,14 @@ extern crate getopts;
 extern crate chrono;
 extern crate rustc_serialize;
 
-//use crypto::md5::Md5;
-//use crypto::digest::Digest;
-
-// opt parsing
-//use getopts::{Options, Matches};
-//use std::env;
-
-//use std::thread;
 use chrono::*;
-
-//use std::io;
-//use mustache::MapBuilder;
-//use std::collections::HashMap;
-
-//#[macro_use] extern crate lazy_static;
-//extern crate regex;
-//use regex::Regex;
 
 use etcd::Client;
 
-//use std::error::Error;
-//use std::io::prelude::*;
-//use std::fs::File;
 use std::path::Path;
 use std::env;
+
+use std::cmp::Ordering;
 
 #[derive(RustcEncodable, Debug)]
 pub enum SSLCertState {
@@ -230,12 +213,29 @@ impl ComponentSpec {
 
     pub fn finalize(&mut self, server_state: &ServerState) {
         if self.vhosts.len() != 0 && self.upstreams.len() != 0 {
+            self.upstreams.sort();
             self.configured = true;
             self.name_list = self.vhosts.join(", ");
         }
         if self.ssl_redirect && !server_state.ssl_ready() {
             self.show_placeholder = true;
         }
+    }
+}
+impl PartialEq for ComponentSpec  {
+    fn eq(&self, other: &ComponentSpec) -> bool {
+        self.name.eq(&other.name)
+    }
+}
+impl Eq for ComponentSpec {}
+impl Ord for ComponentSpec {
+    fn cmp(&self, other: &ComponentSpec) -> Ordering {
+        self.name.cmp(&other.name)
+    }
+}
+impl PartialOrd for ComponentSpec {
+    fn partial_cmp(&self, other: &ComponentSpec) -> Option<Ordering> {
+        Some(self.cmp(other))
     }
 }
 
@@ -269,6 +269,22 @@ impl StaticSpec {
             self.configured = true;
             self.name_list = self.vhosts.join(", ");
         }
+    }
+}
+impl PartialEq for StaticSpec  {
+    fn eq(&self, other: &StaticSpec) -> bool {
+        self.name.eq(&other.name)
+    }
+}
+impl Eq for StaticSpec {}
+impl Ord for StaticSpec {
+    fn cmp(&self, other: &StaticSpec) -> Ordering {
+        self.name.cmp(&other.name)
+    }
+}
+impl PartialOrd for StaticSpec {
+    fn partial_cmp(&self, other: &StaticSpec) -> Option<Ordering> {
+        Some(self.cmp(other))
     }
 }
 

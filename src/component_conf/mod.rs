@@ -92,6 +92,9 @@ pub fn gen(client: &Client, server_state: &mut ServerState) {
         }
     }
 
+    ssl_components.sort_by(|a,b| a.cmp(&b));
+    non_ssl_components.sort_by(|a,b| a.cmp(&b));
+
     let ssl_data = MustacheHolder::new(ssl_components, endpoints, server_state.ssl_ready());
     let ssl_template_string = helpers::template_to_string::<String, MustacheHolder>("ssl_apps", ssl_data);
 

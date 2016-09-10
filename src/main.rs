@@ -145,7 +145,7 @@ fn main() {
     let program = args[0].clone();
 
     let mut opts = Options::new();
-    opts.optflag("p", "cert-path", "the path to put ssl certs.");
+    opts.optopt("p", "cert-path", "the path to put ssl certs.", "PATH");
     opts.optflag("c", "comps", "only generate component confs.");
     opts.optflag("s", "ssl", "only generate ssl confs.");
     opts.optflag("f", "fetch-ssl", "generate ssl confs and run le-fetch.");
@@ -165,7 +165,7 @@ fn main() {
         return;
     }
     if matches.opt_present("v") {
-        println!("conf_manager: v0.1.1");
+        println!("conf_manager: v0.1.2");
         return;
     }
     //let output = matches.opt_str("p");
